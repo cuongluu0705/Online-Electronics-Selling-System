@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Button } from '../ui/button';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { Link } from 'react-router-dom'; 
+import { toast } from 'sonner'; 
 
 export interface StaffLoginPageProps {
-  onLogin: (email: string, pass: string) => void;
+  onLogin: (email: string, pass: string) => Promise<void>;
 }
 
 export const StaffLoginPage: React.FC<StaffLoginPageProps> = ({ onLogin }) => {
@@ -15,21 +17,27 @@ export const StaffLoginPage: React.FC<StaffLoginPageProps> = ({ onLogin }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    await onLogin(email, password);
-    setLoading(false);
+    try {
+      await onLogin(email, password);
+    } catch (err: any) {
+      toast.error(err.message || "Login failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-900 p-4 relative overflow-hidden">
       
-      {/* Background decoration */}
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-600/10 blur-[100px]"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-600/10 blur-[100px]"></div>
 
-      {/* Login Card */}
+      <Link to="/" className="absolute top-8 left-8 flex items-center gap-2 text-slate-300 hover:text-white transition-colors font-medium z-20">
+        <ArrowLeft className="size-5" />
+        Back to Home
+      </Link>
+
       <div className="relative z-10 w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
-        
-        {/* Header */}
         <div className="bg-slate-50 px-8 py-6 border-b border-slate-100 text-center">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 text-blue-600 mb-3">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -40,54 +48,29 @@ export const StaffLoginPage: React.FC<StaffLoginPageProps> = ({ onLogin }) => {
           <p className="text-slate-500 text-sm mt-1">Internal Management System</p>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="p-8">
           <div className="space-y-5">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">Staff ID / Email</label>
-              <input
-                type="text"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                placeholder="e.g., staff001"
-                required
-              />
+              <input type="text" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" placeholder="e.g., staff001" required />
             </div>
             
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">Password</label>
               <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all pr-10"
-                  placeholder="••••••••"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
-                  tabIndex={-1}
-                >
+                <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all pr-10" placeholder="••••••••" required />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none" tabIndex={-1}>
                   {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
                 </button>
               </div>
             </div>
 
-            <Button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-lg shadow-blue-600/20 transition-all transform active:scale-[0.98]"
-            >
+            <Button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-lg shadow-blue-600/20 transition-all transform active:scale-[0.98]">
               {loading ? 'Authenticating...' : 'Access System'}
             </Button>
           </div>
         </form>
         
-        {/* Footer */}
         <div className="bg-slate-50 py-3 text-center border-t border-slate-100">
           <p className="text-xs text-slate-400">© 2024 ElectroStore Internal System</p>
         </div>

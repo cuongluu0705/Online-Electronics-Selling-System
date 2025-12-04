@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, useNavigate, useLocation, Navigate } from
 import { Product, CartItem, Order, User, AuditLog } from './types';
 import { mockOrders, mockUsers, mockAuditLogs, mockProducts } from './data/mockData';
 import { login } from './api/auth';
+import { toast, Toaster } from 'sonner'; 
 
 // Components & Pages
 import { Header } from './components/Header';
@@ -28,12 +29,11 @@ import { SystemSettingsPage } from './components/admin/SystemSettingsPage';
 
 import { TemplatePreviewPage } from './components/templates/TemplatePreviewPage';
 import { UnifiedLoginPage } from './components/UnifiedLoginPage';
-import { Button } from './components/ui/button';
-import { Toaster } from './components/ui/sonner';
+import { RegisterPage } from './components/pages/RegisterPage'; 
+import { Button } from './components/ui/button'; 
 
 const API_BASE = 'http://localhost:8000';
 
-// API Helpers
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('oss_token') || '';
   const headers: Record<string, string> = {
@@ -48,6 +48,7 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
   try { data = await res.json(); } catch {}
 
   if (!res.ok) {
+    console.error("API Error:", data);
     throw new Error(data?.detail ?? data?.message ?? `HTTP ${res.status}`);
   }
   return data as T;
@@ -57,7 +58,6 @@ export const formatVND = (amount: number) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
 };
 
-// Data mapping helpers
 function normalizeStatusToFE(status?: string): 'Active' | 'Inactive' {
   const s = (status || '').toLowerCase();
   if (s === 'inactive' || s === 'deactivated' || s === 'disabled') return 'Inactive';
@@ -126,53 +126,111 @@ function ElectroStoreApp() {
   const [users, setUsers] = useState<User[]>(mockUsers);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(mockAuditLogs);
 
-  // Auth State
   const [isStaffLoggedIn, setIsStaffLoggedIn] = useState(false);
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [buyerId, setBuyerId] = useState<number>(1);
 
-  // Fetch Products
+  const fetchProducts = async (query: string = '') => {
+    try {
+      const url = query ? `/buyer/products?q=${encodeURIComponent(query)}` : '/buyer/products';
+      const list = await apiFetch<any[]>(url, { method: 'GET' });
+      setProducts(list.map(mapApiProductToFE));
+    } catch (err) {
+      console.error('Fetch error:', err);
+      setProducts(mockProducts);
+    }
+  };
+
   useEffect(() => {
-    (async () => {
-      try {
-        const list = await apiFetch<any[]>('/buyer/products', { method: 'GET' });
-        setProducts(list.map(mapApiProductToFE));
-      } catch (err) {
-        console.error('Fetch error:', err);
-        setProducts(mockProducts);
-      }
-    })();
+    fetchProducts();
   }, []);
+
+  const handleSearch = async (query: string) => {
+    await fetchProducts(query);
+    navigate('products');
+  };
+
+  const refreshStaffProducts = async () => {
+    try {
+      const list = await apiFetch<any[]>('/staff/products', { method: 'GET' });
+      setStaffProducts(list.map(mapApiProductToFE));
+    } catch (err: any) {
+      toast.error(`Error loading products: ${err.message}`);
+    }
+  };
+
+  const addStaffProduct = async (productData: any) => {
+    try {
+      const payload = {
+        productId: productData.id,
+        productName: productData.name,
+        brand: productData.brand,
+        price: productData.price,
+        color: 'Black', 
+        quantity: productData.stock,
+        specification: productData.description || "N/A",
+        warrantyPeriod: 12,
+        releaseDate: new Date().toISOString().split('T')[0],
+        status: 'Active'
+      };
+      await apiFetch('/staff/products', { method: 'POST', body: JSON.stringify(payload) });
+      await refreshStaffProducts();
+      toast.success("Product added successfully!");
+    } catch (err: any) {
+      toast.error(`Failed to add product: ${err.message}`);
+    }
+  };
+
+  const updateStaffProduct = async (id: string, productData: any) => {
+    try {
+      const payload = {
+        productName: productData.name,
+        brand: productData.brand,
+        price: productData.price,
+        quantity: productData.stock,
+        specification: productData.description
+      };
+      await apiFetch(`/staff/products/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      await refreshStaffProducts();
+      toast.success("Product updated successfully!");
+    } catch (err: any) {
+      toast.error(`Failed to update product: ${err.message}`);
+    }
+  };
+
+  const toggleStaffProductStatus = async (id: string) => {
+    try {
+      const product = staffProducts.find(p => p.id === id);
+      if (!product) return;
+      const nextStatus = product.status === 'Active' ? 'Inactive' : 'Active';
+      const apiStatus = normalizeStatusToAPI(nextStatus);
+      await apiFetch(`/staff/products/${id}/update_product_status`, {
+        method: 'PUT',
+        body: JSON.stringify({ status: apiStatus })
+      });
+      await refreshStaffProducts();
+      toast.success(`Product status changed to ${nextStatus}!`);
+    } catch (err: any) {
+      toast.error(`Failed to update status: ${err.message}`);
+    }
+  };
 
   const addToCart = (product: Product & { quantity?: number }) => {
     const quantityToAdd = product.quantity || 1;
-
-    if (!window.confirm(`Add ${quantityToAdd} x "${product.name}" to cart?`)) return;
-
+    // Không cần confirm phiền phức, thêm luôn và báo toast
     setCart(prev => {
       const existing = prev.find(item => item.product.id === product.id);
-      
       if (existing) {
         const newQuantity = existing.quantity + quantityToAdd;
-
         const finalQuantity = Math.min(newQuantity, product.stock);
-
         return prev.map(item =>
-          item.product.id === product.id
-            ? { ...item, quantity: finalQuantity }
-            : item
+          item.product.id === product.id ? { ...item, quantity: finalQuantity } : item
         );
       }
-
       const { quantity, ...cleanProduct } = product;
-      
-      return [...prev, { 
-        product: cleanProduct as Product, 
-        quantity: quantityToAdd 
-      }];
+      return [...prev, { product: cleanProduct as Product, quantity: quantityToAdd }];
     });
-    
-    alert("Added successfully!");
+    toast.success(`Added ${quantityToAdd} x ${product.name} to cart`);
   };
 
   const updateCartQuantity = (productId: string, quantity: number) => {
@@ -206,7 +264,7 @@ function ElectroStoreApp() {
         body: JSON.stringify(payload),
       });
 
-      alert(`Order placed! Total: ${formatVND(resp.total)}`);
+      toast.success(`Order placed! Total: ${formatVND(resp.total)}`);
       setCart([]);
       
       const confirmedOrder: Order = {
@@ -239,25 +297,10 @@ function ElectroStoreApp() {
       navigate('/order-confirmation', { state: { order: confirmedOrder } });
 
     } catch (err: any) {
-      alert(`Order failed: ${err.message}`);
+      toast.error(`Order failed: ${err.message}`);
     }
   };
 
-  // Staff Logic
-  const refreshStaffProducts = async () => {
-    try {
-      const list = await apiFetch<any[]>('/staff/products', { method: 'GET' });
-      setStaffProducts(list.map(mapApiProductToFE));
-    } catch (err: any) {
-      alert(`Error loading products: ${err.message}`);
-    }
-  };
-
-  const addStaffProduct = async (data: any) => {};
-  const updateStaffProduct = async (id: string, data: any) => {};
-  const toggleStaffProductStatus = async (id: string) => {};
-
-  // Auth Logic
   const handleLogin = async (email: string, pass: string, role: 'buyer' | 'staff' | 'admin') => {
     try {
       const resp = await login(email, pass, role);
@@ -266,6 +309,7 @@ function ElectroStoreApp() {
       if (resp.role === 'buyer') {
         setUser({ name: resp.name || resp.username, email: resp.username, role: 'buyer' });
         setBuyerId(resp.userId);
+        toast.success(`Welcome back, ${resp.name || resp.username}!`);
         navigate('/');
       } else if (resp.role === 'staff') {
         setIsStaffLoggedIn(true);
@@ -276,7 +320,7 @@ function ElectroStoreApp() {
         navigate('/admin/dashboard');
       }
     } catch (err: any) {
-      alert(`Login failed: ${err.message}`);
+      throw err; 
     }
   };
 
@@ -284,7 +328,9 @@ function ElectroStoreApp() {
     setUser(null);
     setIsStaffLoggedIn(false);
     setIsAdminLoggedIn(false);
+    setCart([]); // CLEAR CART HERE
     localStorage.removeItem('oss_token');
+    toast.info("You have been logged out");
     navigate('/');
   };
 
@@ -309,55 +355,20 @@ function ElectroStoreApp() {
       <ScrollToTop />
       
       <Routes>
-        {}
-        <Route path="/" element={
-          <>
-            <Header cartItemCount={cart.reduce((s, i) => s + i.quantity, 0)} onNavigate={legacyNavigate} user={user} onLogout={handleLogout} />
-            <HomePage products={products} onNavigate={legacyNavigate} onAddToCart={addToCart} />
-            <Footer />
-          </>
-        } />
-        
-        <Route path="/products" element={
-          <>
-            <Header cartItemCount={cart.reduce((s, i) => s + i.quantity, 0)} onNavigate={legacyNavigate} user={user} onLogout={handleLogout} />
-            <ProductListingPage 
-              products={products} 
-              onNavigate={legacyNavigate} 
-              onAddToCart={addToCart} 
-              initialCategory={new URLSearchParams(location.search).get('category') || undefined} 
-            />
-            <Footer />
-          </>
-        } />
-
+        <Route path="/" element={<><Header cartItemCount={cart.reduce((s, i) => s + i.quantity, 0)} onNavigate={legacyNavigate} user={user} onLogout={handleLogout} onSearch={handleSearch} /><HomePage products={products} onNavigate={legacyNavigate} onAddToCart={addToCart} /><Footer /></>} />
+        <Route path="/products" element={<><Header cartItemCount={cart.reduce((s, i) => s + i.quantity, 0)} onNavigate={legacyNavigate} user={user} onLogout={handleLogout} onSearch={handleSearch} /><ProductListingPage products={products} onNavigate={legacyNavigate} onAddToCart={addToCart} initialCategory={new URLSearchParams(location.search).get('category') || undefined} /><Footer /></>} />
         <Route path="/product/:id" element={<ProductDetailsWrapper products={products} addToCart={addToCart} navigate={legacyNavigate} cartCount={cart.length} user={user} logout={handleLogout} />} />
-        
-        <Route path="/cart" element={
-          <>
-            <Header cartItemCount={cart.reduce((s, i) => s + i.quantity, 0)} onNavigate={legacyNavigate} user={user} onLogout={handleLogout} />
-            <CartPage cartItems={cart} onUpdateQuantity={updateCartQuantity} onRemoveItem={removeFromCart} onNavigate={legacyNavigate} />
-            <Footer />
-          </>
-        } />
-
-        <Route path="/checkout" element={
-          <>
-            <Header cartItemCount={cart.reduce((s, i) => s + i.quantity, 0)} onNavigate={legacyNavigate} user={user} onLogout={handleLogout} />
-            <CheckoutPage cartItems={cart} onPlaceOrder={placeOrder} />
-            <Footer />
-          </>
-        } />
-
+        <Route path="/cart" element={<><Header cartItemCount={cart.reduce((s, i) => s + i.quantity, 0)} onNavigate={legacyNavigate} user={user} onLogout={handleLogout} onSearch={handleSearch} /><CartPage cartItems={cart} onUpdateQuantity={updateCartQuantity} onRemoveItem={removeFromCart} onNavigate={legacyNavigate} /><Footer /></>} />
+        <Route path="/checkout" element={<><Header cartItemCount={cart.reduce((s, i) => s + i.quantity, 0)} onNavigate={legacyNavigate} user={user} onLogout={handleLogout} onSearch={handleSearch} /><CheckoutPage cartItems={cart} onPlaceOrder={placeOrder} /><Footer /></>} />
         <Route path="/order-confirmation" element={<OrderConfirmationWrapper navigate={legacyNavigate} />} />
         <Route path="/order-status" element={<div className="p-8 text-center">Order Status Page (WIP)</div>} />
-
-        {}
+        
+        {/* Auth Routes */}
         <Route path="/login" element={<UnifiedLoginPage onLogin={(email, pass) => handleLogin(email, pass, 'buyer')} />} />
+        <Route path="/register" element={<RegisterPage />} />
         <Route path="/staff-login" element={<StaffLoginPage onLogin={(email, pass) => handleLogin(email, pass, 'staff')} />} />
         <Route path="/admin-login" element={<AdminLoginPage onLogin={(email, pass) => handleLogin(email, pass, 'admin')} />} />
 
-        {}
         <Route path="/staff/*" element={
           isStaffLoggedIn ? (
             <StaffLayout currentPage={location.pathname.split('/').pop() || 'dashboard'} onNavigate={(p) => navigate(`/staff/${p.replace('staff-', '')}`)} onLogout={handleLogout}>
@@ -370,7 +381,6 @@ function ElectroStoreApp() {
           ) : <Navigate to="/staff-login" />
         } />
 
-        {}
         <Route path="/admin/*" element={
           isAdminLoggedIn ? (
             <AdminLayout currentPage={location.pathname.split('/').pop() || 'dashboard'} onNavigate={(p) => navigate(`/admin/${p.replace('admin-', '')}`)} onLogout={handleLogout}>
@@ -383,7 +393,6 @@ function ElectroStoreApp() {
         } />
       </Routes>
 
-      {}
       {showPortalSwitcher && (
         <div className="fixed bottom-6 right-6 flex flex-col gap-2 z-50">
           <Button size="sm" onClick={() => navigate('/login')}>Login (Customer)</Button>
@@ -391,7 +400,7 @@ function ElectroStoreApp() {
           <Button size="sm" variant="outline" onClick={() => navigate('/admin-login')}>Admin Portal</Button>
         </div>
       )}
-      <Toaster />
+      <Toaster position="top-center" richColors />
     </div>
   );
 }
