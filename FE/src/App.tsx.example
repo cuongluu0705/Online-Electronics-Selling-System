@@ -1,0 +1,510 @@
+import { useState } from 'react';
+import { Product, CartItem, Order, User, AuditLog } from './types';
+import { mockProducts, mockOrders, mockUsers, mockAuditLogs } from './data/mockData';
+
+// Customer Pages
+import { Header } from './components/Header';
+import { Footer } from './components/Footer';
+import { HomePage } from './components/pages/HomePage';
+import { ProductListingPage } from './components/pages/ProductListingPage';
+import { ProductDetailsPage } from './components/pages/ProductDetailsPage';
+import { CartPage } from './components/pages/CartPage';
+import { CheckoutPage } from './components/pages/CheckoutPage';
+import { OrderConfirmationPage } from './components/pages/OrderConfirmationPage';
+import { OrderStatusPage } from './components/pages/OrderStatusPage';
+
+// Staff Pages
+import { StaffLoginPage } from './components/staff/StaffLoginPage';
+import { StaffLayout } from './components/staff/StaffLayout';
+import { ProductManagementPage } from './components/staff/ProductManagementPage';
+import { ProductModificationPage } from './components/staff/ProductModificationPage';
+import { OrderManagementPage } from './components/staff/OrderManagementPage';
+
+// Admin Pages
+import { AdminLoginPage } from './components/admin/AdminLoginPage';
+import { AdminLayout } from './components/admin/AdminLayout';
+import { UserManagementPage } from './components/admin/UserManagementPage';
+import { SystemSettingsPage } from './components/admin/SystemSettingsPage';
+
+// Templates
+import { TemplatePreviewPage } from './components/templates/TemplatePreviewPage';
+
+// Unified Login
+import { UnifiedLoginPage } from './components/UnifiedLoginPage';
+
+import { Button } from './components/ui/button';
+import { Toaster } from './components/ui/sonner';
+
+export default function App() {
+  // State
+  const [currentPage, setCurrentPage] = useState('home');
+  const [pageData, setPageData] = useState<any>({});
+  const [products, setProducts] = useState<Product[]>(mockProducts);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [orders, setOrders] = useState<Order[]>(mockOrders);
+  const [users, setUsers] = useState<User[]>(mockUsers);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(mockAuditLogs);
+  const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
+  const [isStaffLoggedIn, setIsStaffLoggedIn] = useState(false);
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
+  const [currentUserRole, setCurrentUserRole] = useState<'buyer' | 'staff' | 'admin' | null>(null);
+  
+  // Navigation
+  const navigate = (page: string, data?: any) => {
+    setCurrentPage(page);
+    setPageData(data || {});
+  };
+  
+  // Cart functions
+  const addToCart = (product: Product) => {
+    setCart(prev => {
+      const existing = prev.find(item => item.product.id === product.id);
+      if (existing) {
+        return prev.map(item =>
+          item.product.id === product.id
+            ? { ...item, quantity: Math.min(item.quantity + 1, product.stock) }
+            : item
+        );
+      }
+      return [...prev, { product, quantity: 1 }];
+    });
+  };
+  
+  const updateCartQuantity = (productId: string, quantity: number) => {
+    setCart(prev =>
+      prev.map(item =>
+        item.product.id === productId ? { ...item, quantity } : item
+      )
+    );
+  };
+  
+  const removeFromCart = (productId: string) => {
+    setCart(prev => prev.filter(item => item.product.id !== productId));
+  };
+  
+  // Order functions
+  const placeOrder = (orderData: any) => {
+    const newOrder: Order = {
+      id: `ORD-2024-${String(orders.length + 1).padStart(3, '0')}`,
+      customerId: 'C' + String(Math.floor(Math.random() * 1000)).padStart(3, '0'),
+      customerName: orderData.customerName,
+      customerEmail: orderData.customerEmail,
+      customerPhone: orderData.customerPhone,
+      items: orderData.items,
+      subtotal: orderData.subtotal,
+      discount: orderData.discount,
+      total: orderData.total,
+      recipientName: orderData.recipientName,
+      recipientPhone: orderData.recipientPhone,
+      address: orderData.address,
+      note: orderData.note,
+      status: 'Placed',
+      paymentMethod: 'COD',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      estimatedDelivery: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    };
+    
+    setOrders(prev => [...prev, newOrder]);
+    setCurrentOrder(newOrder);
+    setCart([]);
+    navigate('order-confirmation');
+  };
+  
+  // Product management
+  const addProduct = (productData: Partial<Product>) => {
+    const newProduct: Product = {
+      id: `P${String(products.length + 1).padStart(3, '0')}`,
+      name: productData.name!,
+      brand: productData.brand!,
+      model: productData.model!,
+      price: productData.price!,
+      rating: 4.5,
+      reviews: 0,
+      image: 'https://images.unsplash.com/photo-1658933161439-bbc61172d86b?w=400',
+      category: productData.category!,
+      status: 'Active',
+      stock: productData.stock!,
+      specifications: {},
+      warranty: productData.warranty!,
+      releaseYear: productData.releaseYear!,
+      description: productData.description!
+    };
+    setProducts(prev => [...prev, newProduct]);
+  };
+  
+  const updateProduct = (id: string, productData: Partial<Product>) => {
+    setProducts(prev =>
+      prev.map(p => (p.id === id ? { ...p, ...productData } : p))
+    );
+  };
+  
+  const toggleProductStatus = (id: string) => {
+    setProducts(prev =>
+      prev.map(p =>
+        p.id === id
+          ? { ...p, status: p.status === 'Active' ? 'Inactive' : 'Active' }
+          : p
+      )
+    );
+  };
+  
+  const deleteProduct = (id: string) => {
+    setProducts(prev => prev.filter(p => p.id !== id));
+  };
+  
+  // Order management
+  const updateOrderStatus = (orderId: string, status: Order['status']) => {
+    setOrders(prev =>
+      prev.map(o =>
+        o.id === orderId
+          ? { ...o, status, updatedAt: new Date().toISOString() }
+          : o
+      )
+    );
+  };
+  
+  // User management
+  const addUser = (userData: Partial<User>) => {
+    const newUser: User = {
+      id: `U${String(users.length + 1).padStart(3, '0')}`,
+      name: userData.name!,
+      email: userData.email!,
+      phone: userData.phone!,
+      role: userData.role!,
+      status: 'Active',
+      createdAt: new Date().toISOString()
+    };
+    setUsers(prev => [...prev, newUser]);
+  };
+  
+  const updateUser = (id: string, userData: Partial<User>) => {
+    setUsers(prev =>
+      prev.map(u => (u.id === id ? { ...u, ...userData } : u))
+    );
+  };
+  
+  const toggleUserStatus = (id: string) => {
+    setUsers(prev =>
+      prev.map(u =>
+        u.id === id
+          ? { ...u, status: u.status === 'Active' ? 'Inactive' : 'Active' }
+          : u
+      )
+    );
+  };
+  
+  // System settings
+  const updateSetting = (setting: string, value: string) => {
+    const newLog: AuditLog = {
+      id: `LOG-${String(auditLogs.length + 1).padStart(3, '0')}`,
+      changedBy: 'admin@electrostore.com',
+      timestamp: new Date().toISOString(),
+      entity: 'System Settings',
+      field: setting,
+      previousValue: 'Previous Value',
+      newValue: value
+    };
+    setAuditLogs(prev => [newLog, ...prev]);
+  };
+  
+  // Auth
+  const handleUnifiedLogin = (_email: string, _password: string, role: 'buyer' | 'staff' | 'admin') => {
+    setCurrentUserRole(role);
+    
+    if (role === 'buyer') {
+      navigate('home');
+    } else if (role === 'staff') {
+      setIsStaffLoggedIn(true);
+      navigate('staff-products');
+    } else if (role === 'admin') {
+      setIsAdminLoggedIn(true);
+      navigate('admin-dashboard');
+    }
+  };
+  
+  const handleStaffLogin = (_email: string, _password: string) => {
+    setIsStaffLoggedIn(true);
+    setCurrentUserRole('staff');
+    navigate('staff-products');
+  };
+  
+  const handleAdminLogin = (_email: string, _password: string) => {
+    setIsAdminLoggedIn(true);
+    setCurrentUserRole('admin');
+    navigate('admin-dashboard');
+  };
+  
+  const handleStaffLogout = () => {
+    setIsStaffLoggedIn(false);
+    setCurrentUserRole(null);
+    navigate('home');
+  };
+  
+  const handleAdminLogout = () => {
+    setIsAdminLoggedIn(false);
+    setCurrentUserRole(null);
+    navigate('home');
+  };
+  
+  // Portal switcher
+  const PortalSwitcher = () => (
+    <div className="fixed bottom-6 right-6 flex flex-col gap-2 z-50">
+      <div className="bg-white rounded-lg shadow-lg p-3 border border-gray-200">
+        <p className="text-xs text-gray-600 mb-2">Quick Access</p>
+        <div className="flex flex-col gap-2">
+          <Button
+            size="sm"
+            variant={currentPage === 'login' ? 'default' : 'outline'}
+            onClick={() => navigate('login')}
+            className="justify-start"
+          >
+            🔐 Unified Login
+          </Button>
+          <Button
+            size="sm"
+            variant={currentPage.startsWith('staff') ? 'default' : 'outline'}
+            onClick={() => navigate('staff-login')}
+            className="justify-start"
+          >
+            👤 Staff Portal
+          </Button>
+          <Button
+            size="sm"
+            variant={currentPage.startsWith('admin') ? 'default' : 'outline'}
+            onClick={() => navigate('admin-login')}
+            className="justify-start"
+          >
+            🛡️ Admin Portal
+          </Button>
+          <Button
+            size="sm"
+            variant={currentPage === 'template-preview' ? 'default' : 'outline'}
+            onClick={() => navigate('template-preview')}
+            className="justify-start"
+          >
+            📧 Templates
+          </Button>
+          {currentPage !== 'home' && !currentPage.startsWith('staff') && !currentPage.startsWith('admin') && currentPage !== 'login' && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => navigate('home')}
+              className="justify-start"
+            >
+              🏠 Customer View
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+  
+  // Render based on current page
+  const renderPage = () => {
+    // Unified Login
+    if (currentPage === 'login') {
+      return <UnifiedLoginPage onLogin={handleUnifiedLogin} />;
+    }
+    
+    // Staff Portal
+    if (currentPage === 'staff-login') {
+      return <StaffLoginPage onLogin={handleStaffLogin} />;
+    }
+    
+    if (currentPage.startsWith('staff-') && isStaffLoggedIn) {
+      return (
+        <StaffLayout
+          currentPage={currentPage}
+          onNavigate={navigate}
+          onLogout={handleStaffLogout}
+        >
+          {currentPage === 'staff-products' && (
+            <ProductManagementPage
+              products={products}
+              onAddProduct={addProduct}
+              onUpdateProduct={updateProduct}
+              onToggleStatus={toggleProductStatus}
+            />
+          )}
+          {currentPage === 'staff-product-modification' && (
+            <ProductModificationPage
+              products={products}
+              onAddProduct={addProduct}
+              onUpdateProduct={updateProduct}
+              onDeleteProduct={deleteProduct}
+            />
+          )}
+          {currentPage === 'staff-orders' && (
+            <OrderManagementPage
+              orders={orders}
+              onUpdateOrderStatus={updateOrderStatus}
+            />
+          )}
+          {currentPage === 'staff-dashboard' && (
+            <div className="p-8">
+              <h1 className="text-gray-900 mb-4">Staff Dashboard</h1>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                  <p className="text-gray-600 mb-2">Total Products</p>
+                  <p className="text-gray-900">{products.length}</p>
+                </div>
+                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                  <p className="text-gray-600 mb-2">Active Orders</p>
+                  <p className="text-gray-900">{orders.filter(o => o.status !== 'Delivered').length}</p>
+                </div>
+                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                  <p className="text-gray-600 mb-2">Low Stock Items</p>
+                  <p className="text-gray-900">{products.filter(p => p.stock < 10).length}</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </StaffLayout>
+      );
+    }
+    
+    // Admin Portal
+    if (currentPage === 'admin-login') {
+      return <AdminLoginPage onLogin={handleAdminLogin} />;
+    }
+    
+    if (currentPage.startsWith('admin-') && isAdminLoggedIn) {
+      return (
+        <AdminLayout
+          currentPage={currentPage}
+          onNavigate={navigate}
+          onLogout={handleAdminLogout}
+        >
+          {currentPage === 'admin-users' && (
+            <UserManagementPage
+              users={users}
+              onAddUser={addUser}
+              onUpdateUser={updateUser}
+              onToggleStatus={toggleUserStatus}
+            />
+          )}
+          {currentPage === 'admin-settings' && (
+            <SystemSettingsPage
+              auditLogs={auditLogs}
+              onUpdateSetting={updateSetting}
+            />
+          )}
+          {currentPage === 'admin-dashboard' && (
+            <div className="p-8">
+              <h1 className="text-gray-900 mb-4">Admin Dashboard</h1>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                  <p className="text-gray-600 mb-2">Total Users</p>
+                  <p className="text-gray-900">{users.length}</p>
+                </div>
+                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                  <p className="text-gray-600 mb-2">Total Orders</p>
+                  <p className="text-gray-900">{orders.length}</p>
+                </div>
+                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                  <p className="text-gray-600 mb-2">Total Products</p>
+                  <p className="text-gray-900">{products.length}</p>
+                </div>
+                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                  <p className="text-gray-600 mb-2">Revenue</p>
+                  <p className="text-gray-900">${orders.reduce((sum, o) => sum + o.total, 0).toFixed(2)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </AdminLayout>
+      );
+    }
+    
+    // Template Preview
+    if (currentPage === 'template-preview') {
+      return (
+        <TemplatePreviewPage
+          order={currentOrder || orders[0]}
+          onBack={() => navigate('home')}
+        />
+      );
+    }
+    
+    // Customer Pages - with Header and Footer
+    return (
+      <>
+        <Header
+          cartItemCount={cart.reduce((sum, item) => sum + item.quantity, 0)}
+          onNavigate={navigate}
+          currentPage={currentPage}
+        />
+        
+        {currentPage === 'home' && (
+          <HomePage
+            products={products}
+            onNavigate={navigate}
+            onAddToCart={addToCart}
+          />
+        )}
+        
+        {currentPage === 'products' && (
+          <ProductListingPage
+            products={products}
+            onNavigate={navigate}
+            onAddToCart={addToCart}
+            initialCategory={pageData.category}
+          />
+        )}
+        
+        {currentPage === 'product-details' && (
+          <ProductDetailsPage
+            product={products.find(p => p.id === pageData.productId)!}
+            relatedProducts={products.filter(p => 
+              p.category === products.find(pr => pr.id === pageData.productId)?.category &&
+              p.id !== pageData.productId
+            ).slice(0, 4)}
+            onAddToCart={addToCart}
+            onNavigate={navigate}
+          />
+        )}
+        
+        {currentPage === 'cart' && (
+          <CartPage
+            cartItems={cart}
+            onUpdateQuantity={updateCartQuantity}
+            onRemoveItem={removeFromCart}
+            onNavigate={navigate}
+          />
+        )}
+        
+        {currentPage === 'checkout' && (
+          <CheckoutPage
+            cartItems={cart}
+            onPlaceOrder={placeOrder}
+          />
+        )}
+        
+        {currentPage === 'order-confirmation' && currentOrder && (
+          <OrderConfirmationPage
+            order={currentOrder}
+            onNavigate={navigate}
+          />
+        )}
+        
+        {currentPage === 'order-status' && currentOrder && (
+          <OrderStatusPage
+            order={currentOrder}
+            onNavigate={navigate}
+          />
+        )}
+        
+        <Footer />
+      </>
+    );
+  };
+  
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {renderPage()}
+      <PortalSwitcher />
+      <Toaster />
+    </div>
+  );
+}

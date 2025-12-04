@@ -1,0 +1,207 @@
+import { useState } from 'react';
+import { Button } from './ui/button';
+import { ShoppingBag, Users, Shield } from 'lucide-react';
+
+type UserRole = 'buyer' | 'staff' | 'admin';
+
+interface RoleOption {
+  value: UserRole;
+  label: string;
+  icon: any;
+  description: string;
+}
+
+const roleOptions: RoleOption[] = [
+  {
+    value: 'buyer',
+    label: 'Customer',
+    icon: ShoppingBag,
+    description: 'Browse and purchase products'
+  },
+  {
+    value: 'staff',
+    label: 'Staff',
+    icon: Users,
+    description: 'Manage products and orders'
+  },
+  {
+    value: 'admin',
+    label: 'Administrator',
+    icon: Shield,
+    description: 'System configuration and user management'
+  }
+];
+
+interface UnifiedLoginPageProps {
+  onLogin: (email: string, password: string, role: UserRole) => void;
+}
+
+export function UnifiedLoginPage({ onLogin }: UnifiedLoginPageProps) {
+  const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedRole) {
+      onLogin(email, password, selectedRole);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-gray-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="bg-white rounded-xl shadow-lg p-8">
+          {/* Logo and Header */}
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-blue-600 rounded-xl flex items-center justify-center mx-auto mb-4">
+              <ShoppingBag className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-gray-900 mb-2">ElectroStore</h1>
+            <p className="text-gray-600">Sign in to your account</p>
+          </div>
+
+          {/* Role Selection */}
+          {!selectedRole ? (
+            <div className="space-y-3">
+              <p className="text-gray-700 mb-4">Select your role to continue:</p>
+              {roleOptions.map((option) => {
+                const Icon = option.icon;
+                return (
+                  <button
+                    key={option.value}
+                    onClick={() => setSelectedRole(option.value)}
+                    className="w-full p-4 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all text-left group"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+                        <Icon className="w-6 h-6 text-gray-600 group-hover:text-blue-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-gray-900 mb-1">{option.label}</p>
+                        <p className="text-sm text-gray-600">{option.description}</p>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            /* Login Form */
+            <div>
+              <button
+                onClick={() => setSelectedRole(null)}
+                className="text-sm text-blue-600 hover:text-blue-700 mb-4 flex items-center gap-1"
+              >
+                ← Change role
+              </button>
+
+              <div className="mb-6">
+                {roleOptions.map((option) => {
+                  if (option.value === selectedRole) {
+                    const Icon = option.icon;
+                    return (
+                      <div key={option.value} className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
+                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                          <Icon className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="text-gray-900">{option.label}</p>
+                          <p className="text-sm text-gray-600">{option.description}</p>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })}
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label htmlFor="email" className="block text-gray-700 mb-2">
+                    Email
+                  </label>
+                  <input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder={
+                      selectedRole === 'buyer'
+                        ? 'customer@example.com'
+                        : selectedRole === 'staff'
+                        ? 'staff@electrostore.com'
+                        : 'admin@electrostore.com'
+                    }
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="password" className="block text-gray-700 mb-2">
+                    Password
+                  </label>
+                  <input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-600">Remember me</span>
+                  </label>
+                  <button
+                    type="button"
+                    className="text-sm text-blue-600 hover:text-blue-700"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+
+                <Button type="submit" className="w-full">
+                  Sign In
+                </Button>
+              </form>
+
+              {selectedRole === 'buyer' && (
+                <div className="mt-6 text-center">
+                  <p className="text-sm text-gray-600">
+                    Don't have an account?{' '}
+                    <button className="text-blue-600 hover:text-blue-700">
+                      Sign up
+                    </button>
+                  </p>
+                </div>
+              )}
+
+              {/* Demo credentials hint */}
+              <div className="mt-6 p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-gray-600">
+                  <strong>Demo:</strong> Use any email/password to sign in
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="text-center mt-6">
+          <p className="text-sm text-gray-600">
+            © 2024 ElectroStore. All rights reserved.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
