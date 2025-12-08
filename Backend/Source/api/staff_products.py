@@ -1,23 +1,38 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pathlib import Path
+import shutil
+from typing import Optional
 
 from Backend.Source.database_connection import get_db
 from Backend.Source.schemas.product import ProductOut, ProductCreate, ProductUpdate
 
 router = APIRouter(prefix="/staff/products", tags=["staff-products"])
 
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+IMAGE_DIR = BASE_DIR / "database" / "product_images"
+IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+
 class ProductStatusPayload(BaseModel):
     status: str
 
-def get_product_image_url(product_id: str) -> str:
-    base_dir = Path(__file__).resolve().parent.parent.parent / "database" / "product_images"
-    product_dir = base_dir / product_id
+def get_product_image_url(product_id: str) -> Optional[str]:
+ 
+    product_sub_folder = IMAGE_DIR / product_id
+    if product_sub_folder.exists() and product_sub_folder.is_dir():
+        for ext in [".jpg", ".png", ".jpeg", ".webp"]:
+            if (product_sub_folder / f"1{ext}").exists():
+                return f"/product_images/{product_id}/1{ext}"
+            if (product_sub_folder / f"{product_id}{ext}").exists():
+                return f"/product_images/{product_id}/{product_id}{ext}"
+
     for ext in [".jpg", ".png", ".jpeg", ".webp"]:
-        if (product_dir / f"1{ext}").exists():
-            return f"/product_images/{product_id}/1{ext}"
+        file_name = f"{product_id}{ext}"
+        if (IMAGE_DIR / file_name).exists():
+             return f"/product_images/{file_name}"
+             
     return None
 
 def k_to_col(k: str) -> str:
@@ -61,29 +76,47 @@ def staff_list_products(
         ) for r in rows
     ]
 
-@router.post("", response_model=ProductOut)
-def staff_create_product(payload: ProductCreate, db: Session = Depends(get_db)):
-    print(f"👉 ADD REQUEST: {payload}") 
+@router.post("")
+def staff_create_product(
+    productId: str = Form(...),
+    productName: str = Form(...),
+    brand: str = Form(...),
+    price: float = Form(...),
+    quantity: int = Form(...),
+    specification: str = Form(None),
+    status: str = Form("Active"),
+    image: UploadFile = File(None),
+    db: Session = Depends(get_db)
+):
+    print(f"👉 ADD REQUEST: {productId} - {productName}") 
     try:
-        exists = db.execute(text("SELECT 1 FROM Product WHERE ProductId=:pid"), {"pid": payload.productId}).first()
-        if exists: raise HTTPException(status_code=400, detail=f"ID '{payload.productId}' already exists")
-        
+        exists = db.execute(text("SELECT 1 FROM Product WHERE ProductId=:pid"), {"pid": productId}).first()
+        if exists: raise HTTPException(status_code=400, detail=f"ID '{productId}' already exists")
+  
+        if image:
+            product_folder = IMAGE_DIR / productId
+            product_folder.mkdir(parents=True, exist_ok=True)
+
+            file_ext = image.filename.split(".")[-1]
+
+            file_path = product_folder / f"1.{file_ext}"
+            
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(image.file, buffer)
+
         db.execute(
             text("""
                 INSERT INTO Product(ProductId, ProductName, Brand, Price, Color, Quantity, Specification, WarrantyPeriod, ReleaseDate, Status) 
-                VALUES (:pid, :name, :brand, :price, :color, :qty, :spec, :wp, :rd, :st)
+                VALUES (:pid, :name, :brand, :price, 'Black', :qty, :spec, 12, CURDATE(), :st)
             """),
             {
-                "pid": payload.productId, 
-                "name": payload.productName, 
-                "brand": payload.brand, 
-                "price": payload.price, 
-                "color": payload.color, 
-                "qty": payload.quantity, 
-                "spec": payload.specification, 
-                "wp": payload.warrantyPeriod, 
-                "rd": payload.releaseDate, 
-                "st": payload.status
+                "pid": productId, 
+                "name": productName, 
+                "brand": brand, 
+                "price": price, 
+                "qty": quantity, 
+                "spec": specification, 
+                "st": status
             }
         )
         db.commit()
@@ -93,43 +126,62 @@ def staff_create_product(payload: ProductCreate, db: Session = Depends(get_db)):
         print(f"❌ ADD ERROR: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-    return ProductOut(
-        productId=payload.productId,
-        productName=payload.productName,
-        brand=payload.brand,
-        price=payload.price,
-        color=payload.color,
-        quantity=payload.quantity,
-        specification=payload.specification,
-        warrantyPeriod=payload.warrantyPeriod,
-        releaseDate=payload.releaseDate,
-        status=payload.status,
-        imageBaseUrl=None 
-    )
+    return {"message": "Success"}
 
 @router.put("/{product_id}", response_model=ProductOut)
-def staff_update_product(product_id: str, payload: ProductUpdate, db: Session = Depends(get_db)):
-    print(f"👉 UPDATE REQUEST for {product_id}: {payload}") 
-   
-    fields = payload.model_dump(exclude_none=True)
-    
-    if not fields:
-        print("⚠️ NO FIELDS TO UPDATE")
-    else:
-        set_clause = ", ".join([f"{k_to_col(k)}=:{k}" for k in fields.keys()])
-        params = {**fields, "pid": product_id}
-        
+def staff_update_product(
+    product_id: str,
+    productName: Optional[str] = Form(None),
+    brand: Optional[str] = Form(None),
+    price: Optional[float] = Form(None),
+    quantity: Optional[int] = Form(None),
+    specification: Optional[str] = Form(None),
+    status: Optional[str] = Form(None),
+    image: UploadFile = File(None), 
+    db: Session = Depends(get_db)
+):
+    print(f"👉 UPDATE REQUEST for {product_id}")
+
+    update_data = {
+        "ProductName": productName,
+        "Brand": brand,
+        "Price": price,
+        "Quantity": quantity,
+        "Specification": specification,
+        "Status": status
+    }
+    update_fields = {k: v for k, v in update_data.items() if v is not None}
+
+    if update_fields:
+        set_clause = ", ".join([f"{k}=:{k}" for k in update_fields.keys()])
+        params = {**update_fields, "pid": product_id}
         sql = f"UPDATE Product SET {set_clause} WHERE ProductId=:pid"
-        print(f"📝 EXECUTING SQL: {sql}") 
         
         try:
             db.execute(text(sql), params)
             db.commit()
-            print("✅ UPDATE SUCCESS")
         except Exception as e:
             db.rollback()
-            print(f"❌ UPDATE ERROR: {e}")
             raise HTTPException(status_code=500, detail=str(e))
+
+    if image:
+        try:
+
+            product_folder = IMAGE_DIR / product_id
+            product_folder.mkdir(parents=True, exist_ok=True)
+
+            for existing_file in product_folder.glob("1.*"):
+                existing_file.unlink()
+
+            file_ext = image.filename.split(".")[-1]
+            file_path = product_folder / f"1.{file_ext}"
+            
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(image.file, buffer)
+                
+            print(f"✅ IMAGE UPDATED for {product_id}")
+        except Exception as e:
+            print(f"❌ IMAGE UPDATE ERROR: {e}")
 
     updated = db.execute(text("SELECT * FROM Product WHERE ProductId=:pid"), {"pid": product_id}).mappings().first()
     if not updated: raise HTTPException(status_code=404, detail="Product not found")
@@ -150,9 +202,7 @@ def staff_update_product(product_id: str, payload: ProductUpdate, db: Session = 
 
 @router.put("/{product_id}/update_product_status")
 def update_product_status(product_id: str, payload: ProductStatusPayload, db: Session = Depends(get_db)):
-    print(f"👉 STATUS REQUEST for {product_id}: {payload}")
     raw = (payload.status or "").strip().lower()
-    
     if raw == "active": db_status = "Active"
     elif raw in ("inactive", "deactivated"): db_status = "Deactivated"
     else: raise HTTPException(status_code=400, detail="Invalid status")
@@ -161,10 +211,8 @@ def update_product_status(product_id: str, payload: ProductStatusPayload, db: Se
         res = db.execute(text("UPDATE Product SET Status=:st WHERE ProductId=:pid"), {"st": db_status, "pid": product_id})
         if res.rowcount == 0: raise HTTPException(status_code=404, detail="Not found")
         db.commit()
-        print("✅ STATUS UPDATE SUCCESS")
     except Exception as e:
         db.rollback()
-        print(f"❌ STATUS ERROR: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
     return {"success": True, "productId": product_id, "status": db_status}

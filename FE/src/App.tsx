@@ -84,6 +84,8 @@ const mapApiProductToFE = (p: any): Product => {
     category = 'Cameras';
   }
 
+  const timestamp = new Date().getTime();
+
   return {
     id: String(p.productId),
     name: p.productName,
@@ -92,7 +94,9 @@ const mapApiProductToFE = (p: any): Product => {
     originalPrice: Number(p.price || 0) * 1.1, 
     rating: 4.5,
     reviews: 10,
-    image: p.imageBaseUrl ? `${API_BASE}${p.imageBaseUrl}` : 'https://placehold.co/600x400?text=No+Image',
+    image: p.imageBaseUrl 
+      ? `${API_BASE}${p.imageBaseUrl}?v=${timestamp}` 
+      : 'https://placehold.co/600x400?text=No+Image',
     images: [],
     category: category, 
     status: normalizeStatusToFE(p.status),
@@ -137,13 +141,19 @@ function ElectroStoreApp() {
       setProducts(list.map(mapApiProductToFE));
     } catch (err) {
       console.error('Fetch error:', err);
-      setProducts(mockProducts);
     }
   };
 
   useEffect(() => {
     fetchProducts();
-  }, []);
+    const intervalId = setInterval(() => {
+      if (!location.pathname.startsWith('/staff') && !location.pathname.startsWith('/admin')) {
+         fetchProducts(); 
+      }
+    }, 5000); 
+
+    return () => clearInterval(intervalId);
+  }, [location.pathname]); 
 
   const handleSearch = async (query: string) => {
     await fetchProducts(query);
@@ -159,39 +169,55 @@ function ElectroStoreApp() {
     }
   };
 
-  const addStaffProduct = async (productData: any) => {
+  const addStaffProduct = async (formData: FormData) => {
     try {
-      const payload = {
-        productId: productData.id,
-        productName: productData.name,
-        brand: productData.brand,
-        price: productData.price,
-        color: 'Black', 
-        quantity: productData.stock,
-        specification: productData.description || "N/A",
-        warrantyPeriod: 12,
-        releaseDate: new Date().toISOString().split('T')[0],
-        status: 'Active'
-      };
-      await apiFetch('/staff/products', { method: 'POST', body: JSON.stringify(payload) });
-      await refreshStaffProducts();
+      const token = localStorage.getItem('oss_token') || '';
+      const res = await fetch(`${API_BASE}/staff/products`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || 'Add failed');
+      }
+
+      await Promise.all([
+        refreshStaffProducts(),
+        fetchProducts()        
+      ]);
+      
       toast.success("Product added successfully!");
     } catch (err: any) {
       toast.error(`Failed to add product: ${err.message}`);
     }
   };
 
-  const updateStaffProduct = async (id: string, productData: any) => {
+  const updateStaffProduct = async (id: string, formData: FormData) => {
     try {
-      const payload = {
-        productName: productData.name,
-        brand: productData.brand,
-        price: productData.price,
-        quantity: productData.stock,
-        specification: productData.description
-      };
-      await apiFetch(`/staff/products/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
-      await refreshStaffProducts();
+      const token = localStorage.getItem('oss_token') || '';
+      
+      const res = await fetch(`${API_BASE}/staff/products/${id}`, {
+        method: 'PUT', 
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Update failed');
+      }
+
+      await Promise.all([
+        refreshStaffProducts(),
+        fetchProducts()
+      ]);
+
       toast.success("Product updated successfully!");
     } catch (err: any) {
       toast.error(`Failed to update product: ${err.message}`);

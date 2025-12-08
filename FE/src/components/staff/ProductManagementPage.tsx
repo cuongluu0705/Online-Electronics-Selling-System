@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Product } from '../../types';
 import { Button } from '../ui/button';
-import { Plus, Edit, Power, Search, X, Loader2 } from 'lucide-react';
+import { Plus, Edit, Power, Search, X, Loader2, Upload } from 'lucide-react';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
+import { toast } from 'sonner';
 
 interface ProductManagementPageProps {
   products: Product[]; 
-  onAddProduct: (data: any) => Promise<void>;
-  onUpdateProduct: (id: string, data: any) => Promise<void>;
+  onAddProduct: (data: FormData) => Promise<void>;
+  onUpdateProduct: (id: string, data: FormData) => Promise<void>;
   onToggleStatus: (id: string) => Promise<void>;
 }
 
@@ -27,6 +28,9 @@ export function ProductManagementPage({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
   
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [formData, setFormData] = useState({
     id: '',
     name: '',
@@ -41,6 +45,10 @@ export function ProductManagementPage({
     setFormData({
       id: '', name: '', brand: '', category: 'Smartphones', price: '', stock: '', description: ''
     });
+    setSelectedImage(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const handleOpenAdd = () => {
@@ -51,6 +59,9 @@ export function ProductManagementPage({
 
   const handleOpenEdit = (product: Product) => {
     setModalMode('edit');
+    setSelectedImage(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+
     setFormData({
       id: product.id,
       name: product.name,
@@ -63,42 +74,49 @@ export function ProductManagementPage({
     setIsModalOpen(true);
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedImage(e.target.files[0]);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.name || !formData.price) {
-      alert("Name and Price are required!");
+      toast.error("Name and Price are required!");
       return;
     }
 
     setIsLoading(true);
     try {
+      const data = new FormData();
+      if (modalMode === 'add') data.append('productId', formData.id);
+      
+      data.append('productName', formData.name);
+      data.append('brand', formData.brand);
+      data.append('price', formData.price);
+      data.append('quantity', formData.stock);
+      data.append('category', formData.category);
+      data.append('specification', formData.description);
+      
+      if (selectedImage) {
+        data.append('image', selectedImage);
+      }
+
       if (modalMode === 'add') {
         if (!formData.id) {
-          alert("Product ID is required for new products!");
+          toast.error("Product ID is required for new products!");
           setIsLoading(false);
           return;
         }
-        await onAddProduct({
-          id: formData.id,
-          name: formData.name,
-          brand: formData.brand,
-          category: formData.category,
-          price: Number(formData.price),
-          stock: Number(formData.stock),
-          description: formData.description
-        });
+        data.append('status', 'Active');
+        await onAddProduct(data);
       } else {
-        await onUpdateProduct(formData.id, {
-          name: formData.name,
-          brand: formData.brand,
-          category: formData.category,
-          price: Number(formData.price),
-          stock: Number(formData.stock),
-          description: formData.description
-        });
+        await onUpdateProduct(formData.id, data);
       }
       setIsModalOpen(false); 
+      resetForm();
     } catch (error) {
       console.error(error);
     } finally {
@@ -126,7 +144,6 @@ export function ProductManagementPage({
 
   return (
     <div className="p-8 relative">
-      {}
       {isLoading && (
         <div className="absolute inset-0 bg-white/50 z-50 flex items-center justify-center rounded-lg backdrop-blur-sm">
           <div className="bg-white p-4 rounded-full shadow-lg">
@@ -146,7 +163,6 @@ export function ProductManagementPage({
         </Button>
       </div>
 
-      {}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mb-6">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 size-5" />
@@ -160,7 +176,6 @@ export function ProductManagementPage({
         </div>
       </div>
 
-      {}
       <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -247,11 +262,10 @@ export function ProductManagementPage({
         </div>
       </div>
 
-      {}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 sticky top-0">
               <h2 className="text-lg font-bold text-gray-900">
                 {modalMode === 'add' ? 'Add New Product' : 'Edit Product'}
               </h2>
@@ -298,6 +312,30 @@ export function ProductManagementPage({
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Product Image {modalMode === 'edit' && '(Leave empty to keep current image)'}
+                </label>
+                <div className="relative">
+                  <input 
+                    ref={fileInputRef}
+                    type="file" 
+                    accept="image/*"
+                    className="w-full px-3 py-2 border rounded-lg text-sm text-gray-500
+                      file:mr-4 file:py-2 file:px-4
+                      file:rounded-full file:border-0
+                      file:text-sm file:font-semibold
+                      file:bg-blue-50 file:text-blue-700
+                      hover:file:bg-blue-100"
+                    onChange={handleFileChange}
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                      <Upload className="size-4 text-gray-400"/>
+                  </div>
+                </div>
+                {selectedImage && <p className="text-xs text-green-600 mt-1">Selected: {selectedImage.name}</p>}
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Price (VND) *</label>
@@ -337,6 +375,17 @@ export function ProductManagementPage({
                   <option value="Cameras">Cameras</option>
                   <option value="Accessories">Accessories</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description / Specification</label>
+                <textarea
+                  rows={3}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  placeholder="Enter product details..."
+                  value={formData.description}
+                  onChange={e => setFormData({...formData, description: e.target.value})}
+                />
               </div>
 
               <div className="pt-2 flex justify-end gap-3">
