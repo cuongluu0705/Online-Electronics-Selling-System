@@ -10,7 +10,6 @@ __pycache__/
 *.pyo
 *.pyd
 Backend/.env
-Backend/Database/product_images/ 
 Backend/Source/__pycache__/
 
 # --- Node.js / Frontend ---
