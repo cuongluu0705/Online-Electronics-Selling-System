@@ -145,19 +145,44 @@ function ElectroStoreApp() {
   };
 
   useEffect(() => {
-    fetchProducts();
-    const intervalId = setInterval(() => {
-      if (!location.pathname.startsWith('/staff') && !location.pathname.startsWith('/admin')) {
-         fetchProducts(); 
-      }
-    }, 5000); 
+  const currentQuery = new URLSearchParams(location.search).get('q') || '';
+  fetchProducts(currentQuery);
 
-    return () => clearInterval(intervalId);
-  }, [location.pathname]); 
+  const intervalId = setInterval(() => {
+    if (!location.pathname.startsWith('/staff') && !location.pathname.startsWith('/admin')) {
+       const queryNow = new URLSearchParams(window.location.search).get('q') || '';
+
+       fetchProducts(queryNow); 
+    }
+  }, 5000); 
+
+  return () => clearInterval(intervalId);
+}, [location.pathname, location.search]);
+
+useEffect(() => {
+  if (user && buyerId) {
+    const savedCart = localStorage.getItem(`oss_cart_${buyerId}`);
+    
+    if (savedCart) {
+      try {
+        setCart(JSON.parse(savedCart));
+      } catch (e) {
+        console.error("Lỗi đọc giỏ hàng", e);
+      }
+    } else {
+      setCart([]);
+    }
+  }
+}, [user, buyerId]);
+
+useEffect(() => {
+  if (user && buyerId) {
+    localStorage.setItem(`oss_cart_${buyerId}`, JSON.stringify(cart));
+  }
+}, [cart, user, buyerId]);
 
   const handleSearch = async (query: string) => {
-    await fetchProducts(query);
-    navigate('products');
+    navigate(`/products?q=${encodeURIComponent(query)}`);
   };
 
   const refreshStaffProducts = async () => {
@@ -243,7 +268,6 @@ function ElectroStoreApp() {
 
   const addToCart = (product: Product & { quantity?: number }) => {
     const quantityToAdd = product.quantity || 1;
-    // Không cần confirm phiền phức, thêm luôn và báo toast
     setCart(prev => {
       const existing = prev.find(item => item.product.id === product.id);
       if (existing) {
@@ -354,7 +378,7 @@ function ElectroStoreApp() {
     setUser(null);
     setIsStaffLoggedIn(false);
     setIsAdminLoggedIn(false);
-    setCart([]); // CLEAR CART HERE
+    setCart([]);
     localStorage.removeItem('oss_token');
     toast.info("You have been logged out");
     navigate('/');
